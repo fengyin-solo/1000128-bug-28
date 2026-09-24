@@ -14,6 +14,22 @@ class Store:
         self._tables: dict[str, list[dict[str, Any]]] = {
             name: [dict(row) for row in rows] for name, rows in SEED_ROWS.items()
         }
+        self._normalize_seed()
+
+    def _normalize_seed(self) -> None:
+        """示例数据里的展示镜像字段与时间戳以 status 为准对齐，避免列表/详情各说各话。"""
+        for row in self._tables.get("waybill", []):
+            row["运单状态"] = row.get("status")
+            if row.get("status") == "待装车":
+                row["装车时间"] = ""
+            if row.get("status") != "已签收":
+                row["卸货时间"] = ""
+        for row in self._tables.get("dispatch", []):
+            row["调度状态"] = row.get("status")
+            if row.get("status") == "待派单":
+                row["指派车辆"] = ""
+                row["指派司机"] = ""
+
 
     def module_names(self) -> list[str]:
         return sorted(self._tables)

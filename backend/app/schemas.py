@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 T = TypeVar("T")
 
@@ -22,10 +22,28 @@ class ActionResult(BaseModel):
 
 
 class EntryPayload(BaseModel):
-    """登记或修改一条业务记录时提交的字段集合。"""
+    """登记或修改一条业务记录时提交的字段集合。
+
+    前端动作按钮直接发 ``{"action": "确认装车"}``，登记入口则发
+    ``{"values": {...}}``；这里在入库前把顶层字段折进 values，
+    让两端读到的入参口径一致。
+    """
 
     values: dict[str, Any] = Field(default_factory=dict)
     remark: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fold_top_level_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        folded = dict(data)
+        values = dict(folded.get("values") or {})
+        for key, value in folded.items():
+            if key not in ("values", "remark") and key not in values:
+                values[key] = value
+        folded["values"] = values
+        return folded
 
 
 

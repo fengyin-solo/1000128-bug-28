@@ -10,6 +10,7 @@ REQUIRED_FIELDS = ["调度单号", "关联订单", "配送线路"]
 STATUS_ORDER = ["待派单", "已派单", "已发车", "已撤销"]
 ACTION_RULES = {"确认派单": "已派单", "确认发车": "已发车", "撤销派单": "已撤销"}
 NEGATIVE_ACTIONS = ["撤销派单"]
+ACTION_PRECONDITIONS = {"确认派单": "待派单", "确认发车": "已派单", "撤销派单": "已派单"}
 
 
 class DispatchService:
@@ -40,7 +41,11 @@ class DispatchService:
         rows = store.rows(MODULE)
         entry = {"id": max((int(row.get("id", 0)) for row in rows), default=0) + 1}
         entry.update({field: values.get(field) for field in REQUIRED_FIELDS})
+        entry["指派车辆"] = ""
+        entry["指派司机"] = ""
+        entry["计划发车时间"] = values.get("计划发车时间") or ""
         entry["status"] = STATUS_ORDER[0]
+        entry["调度状态"] = entry["status"]
         entry["pending"] = True
         entry["abnormal"] = False
         rows.append(entry)
@@ -53,9 +58,16 @@ class DispatchService:
         if action not in ACTION_RULES:
             return None, f"动作「{action}」不属于调度派单可执行范围"
         target = ACTION_RULES[action]
-        if target not in STATUS_ORDER:
-            return None, f"目标状态「{target}」不在允许的状态序列里"
+        required_status = ACTION_PRECONDITIONS.get(action)
+        current_status = str(entry.get("status") or "")
+        if required_status and current_status != required_status:
+            return None, f"调度单当前为「{current_status}」，不允许执行「{action}」"
         entry["status"] = target
+        entry["调度状态"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
+        if action == "撤销派单":
+            # 收回派单：清空上一张单残留的指派车辆/司机，释放后才能重新指派。
+            entry["指派车辆"] = ""
+            entry["指派司机"] = ""
         return entry, f"调度单已{action}"
